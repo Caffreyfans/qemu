@@ -6,103 +6,121 @@
 #include "qemu/module.h"
 #include "system/memory.h"
 #include "qemu/units.h"
+#include "ui/console.h"
 
 #define TYPE_FAKE_GPU "fakegpu"
 #define FAKE_GPU(obj) OBJECT_CHECK(FakeGPUState, (obj), TYPE_FAKE_GPU)
 
-#define FB_WIDTH 1024
-#define FB_HEIGHT 768
+#define FB_WIDTH 800
+#define FB_HEIGHT 800
 #define FB_BPP 4
-#define FB_SIZE (FB_WIDTH * FB_HEIGHT * FB_BPP)  /* 1024x768x32bpp */
+
+#define FB_SIZE (FB_WIDTH * FB_HEIGHT * FB_BPP)
 #define FB_BAR_SIZE (4 * MiB)
 
-typedef struct FakeGPUState {
+typedef struct FakeGPUState
+{
     PCIDevice parent_obj;
-
-    MemoryRegion fb_mmio;
-    uint8_t *fb;
+    MemoryRegion vram;
+    QemuConsole *con;
 } FakeGPUState;
 
-/* MMIO read */
-static uint64_t fakegpu_read(void *opaque, hwaddr addr, unsigned size)
+static void fakegpu_update_display(void *opaque)
 {
     FakeGPUState *s = opaque;
+    DisplaySurface *surface;
+    uint8_t *src;
+    uint8_t *dst;
+    int stride;
+    int y;
 
-    if (addr + size > FB_SIZE) {
-        return 0;
-    }
-
-    uint64_t val = 0;
-    memcpy(&val, s->fb + addr, size);
-    return val;
-}
-
-/* MMIO write */
-static void fakegpu_write(void *opaque, hwaddr addr, uint64_t val, unsigned size)
-{
-    FakeGPUState *s = opaque;
-
-    if (addr + size > FB_SIZE) {
+    if (s->con == NULL)
+    {
         return;
     }
 
-    memcpy(s->fb + addr, &val, size);
+    surface = qemu_console_surface(s->con);
+    if (surface == NULL)
+    {
+        return;
+    }
+
+    src = memory_region_get_ram_ptr(&s->vram);
+    if (src == NULL)
+    {
+        return;
+    }
+
+    dst = surface_data(surface);
+    if (dst == NULL)
+    {
+        return;
+    }
+
+    stride = surface_stride(surface);
+
+    for (y = 0; y < FB_HEIGHT; y++)
+    {
+        memcpy(dst + y * stride,
+               src + y * FB_WIDTH * FB_BPP,
+               FB_WIDTH * FB_BPP);
+    }
+
+    dpy_gfx_update(s->con, 0, 0, FB_WIDTH, FB_HEIGHT);
 }
 
-static const MemoryRegionOps fakegpu_ops = {
-    .read = fakegpu_read,
-    .write = fakegpu_write,
-    .endianness = DEVICE_LITTLE_ENDIAN,
+static const GraphicHwOps fakegpu_graphic_ops = {
+    .gfx_update = fakegpu_update_display,
 };
 
-/* 初始化 PCI 设备 */
 static void fakegpu_realize(PCIDevice *pdev, Error **errp)
 {
     FakeGPUState *s = FAKE_GPU(pdev);
 
-    /* 分配 framebuffer */
-    s->fb = g_malloc0(FB_SIZE);
+    memory_region_init_ram(
+        &s->vram,
+        OBJECT(s),
+        "fakegpu-vram",
+        FB_BAR_SIZE,
+        errp);
+    if (*errp)
+    {
+        return;
+    }
 
-    /* 初始化 MMIO */
-    memory_region_init_io(&s->fb_mmio, OBJECT(s), &fakegpu_ops, s,
-                          "fakegpu-fb", FB_BAR_SIZE);
+    pci_register_bar(
+        pdev,
+        0,
+        PCI_BASE_ADDRESS_SPACE_MEMORY | PCI_BASE_ADDRESS_MEM_PREFETCH,
+        &s->vram);
 
-    /* 注册 BAR0 */
-    pci_register_bar(pdev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &s->fb_mmio);
-
+    s->con = graphic_console_init(DEVICE(s), 0, &fakegpu_graphic_ops, s);
+    qemu_console_resize(s->con, FB_WIDTH, FB_HEIGHT);
 }
 
-static void fakegpu_uninit(PCIDevice *pdev)
-{
-    FakeGPUState *s = FAKE_GPU(pdev);
-    g_free(s->fb);
-}
-
-/* class init */
 static void fakegpu_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
 
     k->realize = fakegpu_realize;
-    k->exit = fakegpu_uninit;
 
     k->vendor_id = 0xAAAA;
     k->device_id = 0xBBBB;
     k->revision = 0x00;
-    k->class_id = PCI_CLASS_DISPLAY_XGA;
+    k->class_id = 0x0380;
 
     set_bit(DEVICE_CATEGORY_DISPLAY, dc->categories);
 }
 
 static const TypeInfo fakegpu_info = {
-    .name          = TYPE_FAKE_GPU,
-    .parent        = TYPE_PCI_DEVICE,
+    .name = TYPE_FAKE_GPU,
+    .parent = TYPE_PCI_DEVICE,
     .instance_size = sizeof(FakeGPUState),
-    .class_init    = fakegpu_class_init,
-    .interfaces = (const InterfaceInfo[]) {
-        { INTERFACE_CONVENTIONAL_PCI_DEVICE },
-        { },
+    .class_init = fakegpu_class_init,
+    .interfaces = (const InterfaceInfo[]){
+        {INTERFACE_CONVENTIONAL_PCI_DEVICE},
+        {},
     },
 };
 
