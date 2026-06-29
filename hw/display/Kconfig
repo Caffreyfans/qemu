@@ -66,6 +66,12 @@ config BOCHS_DISPLAY
     select VGA
     select EDID
 
+config METAXGPU
+    bool
+    default y if PCI_DEVICES
+    depends on PCI
+    select EDID
+
 config FRAMEBUFFER
     bool
 
