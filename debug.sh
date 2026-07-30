@@ -21,7 +21,12 @@ set --
 source edksetup.sh >/tmp/metax-edksetup.log
 set -- "${SCRIPT_ARGS[@]}"
 build -p MetaXPkg/MetaXPkg.dsc -a X64 -b DEBUG -t GCC
-EfiRom -f 0x9999 -i 0x0001 -e "${GOP_EFI}" -o "${GOP_ROM}" -q
+"${EDK2_DIR}/BaseTools/Source/C/bin/EfiRom" \
+  -f 0x9999 \
+  -i 0x0001 \
+  -e "${GOP_EFI}" \
+  -o "${GOP_ROM}" \
+  -q
 popd >/dev/null
 
 cp "${GOP_ROM}" "${ESP_DIR}/"
