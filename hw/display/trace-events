@@ -1,5 +1,11 @@
 # See docs/devel/tracing.rst for syntax documentation.
 
+# metaxgpu.c
+mxgpu_aux_read_dpcd(uint32_t addr, uint8_t val) "addr=0x%05x val=0x%02x"
+mxgpu_aux_read_edid(uint32_t offset, uint8_t val) "offset=0x%03x val=0x%02x"
+mxgpu_aux_write_dpcd(uint32_t addr, uint8_t val) "addr=0x%05x val=0x%02x"
+mxgpu_mode(uint32_t mode, uint32_t width, uint32_t height, uint32_t clock_khz, uint64_t required_kbps, uint64_t available_kbps) "mode=%u %ux%u clock=%u kHz required=%"PRIu64" kbps available=%"PRIu64" kbps"
+
 # jazz_led.c
 jazz_led_read(uint64_t addr, uint8_t val) "read addr=0x%"PRIx64": 0x%x"
 jazz_led_write(uint64_t addr, uint8_t new) "write addr=0x%"PRIx64": 0x%x"
@@ -225,4 +231,3 @@ apple_gfx_iosfc_map_memory_new_region(size_t i, void *region, uint64_t start, ui
 apple_gfx_iosfc_unmap_memory(void *a, void *b, void *c, void *d, void *e, void *f) "a=%p b=%p c=%p d=%p e=%p f=%p"
 apple_gfx_iosfc_unmap_memory_region(void* mem, void *region) "unmapping @ %p from memory region %p"
 apple_gfx_iosfc_raise_irq(uint32_t vector) "vector=0x%x"
-

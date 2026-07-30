@@ -12,6 +12,7 @@
 #include "ui/qemu-pixman.h"
 #include "hw/display/dpcd.h"
 #include "hw/display/edid.h"
+#include "trace.h"
 
 #define TYPE_MX_GPU "metaxgpu"
 #define MX_GPU(obj) OBJECT_CHECK(MXGPUState, (obj), TYPE_MX_GPU)
@@ -190,18 +191,14 @@ static uint8_t mxgpu_aux_read(MXGPUState *s, uint32_t addr)
 {
     if (addr < sizeof(s->dpcd)) {
         s->dp_aux_status = DP_AUX_STATUS_ACK;
-        qemu_log_mask(LOG_GUEST_ERROR,
-                      "mxgpu: DP AUX read DPCD[0x%05x] -> 0x%02x\n",
-                      addr, s->dpcd[addr]);
+        trace_mxgpu_aux_read_dpcd(addr, s->dpcd[addr]);
         return s->dpcd[addr];
     }
 
     if (addr >= DP_AUX_EDID_BASE && addr < DP_AUX_EDID_END) {
         s->dp_aux_status = DP_AUX_STATUS_ACK;
-        qemu_log_mask(LOG_GUEST_ERROR,
-                      "mxgpu: DP AUX read EDID[0x%03x] -> 0x%02x\n",
-                      addr - DP_AUX_EDID_BASE,
-                      s->edid[addr - DP_AUX_EDID_BASE]);
+        trace_mxgpu_aux_read_edid(addr - DP_AUX_EDID_BASE,
+                                  s->edid[addr - DP_AUX_EDID_BASE]);
         return s->edid[addr - DP_AUX_EDID_BASE];
     }
 
@@ -216,9 +213,7 @@ static void mxgpu_aux_write(MXGPUState *s, uint32_t addr, uint8_t val)
     if (addr < sizeof(s->dpcd)) {
         s->dpcd[addr] = val;
         s->dp_aux_status = DP_AUX_STATUS_ACK;
-        qemu_log_mask(LOG_GUEST_ERROR,
-                      "mxgpu: DP AUX write DPCD[0x%05x] <- 0x%02x\n",
-                      addr, val);
+        trace_mxgpu_aux_write_dpcd(addr, val);
 
         if (addr == DP_DPCD_TRAINING_PATTERN_SET) {
             if (val == 1) {
@@ -263,15 +258,10 @@ static uint64_t mxgpu_dp_mode_required_kbps(MXGPUState *s)
 
 static void mxgpu_dp_dump_msa(MXGPUState *s)
 {
-    qemu_log_mask(LOG_GUEST_ERROR,
-                  "mxgpu: DP MSA mode=%u %ux%u clock=%u kHz "
-                  "htotal=%u hsync=%u-%u vtotal=%u vsync=%u-%u "
-                  "required=%" PRIu64 " kbps available=%" PRIu64 " kbps\n",
-                  s->current_mode, s->width, s->height, s->pixel_clock_khz,
-                  s->h_total, s->h_sync & 0xffff, s->h_sync >> 16,
-                  s->v_total, s->v_sync & 0xffff, s->v_sync >> 16,
-                  mxgpu_dp_mode_required_kbps(s),
-                  mxgpu_dp_link_capacity_kbps(s));
+    trace_mxgpu_mode(s->current_mode, s->width, s->height,
+                     s->pixel_clock_khz,
+                     mxgpu_dp_mode_required_kbps(s),
+                     mxgpu_dp_link_capacity_kbps(s));
 }
 
 static bool mxgpu_dp_main_link_ready(MXGPUState *s)
